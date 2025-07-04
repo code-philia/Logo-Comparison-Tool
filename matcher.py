@@ -6,11 +6,11 @@ from PIL import Image, ImageOps
 from torchvision import transforms
 from collections import OrderedDict
 from tqdm import tqdm
-from .model import BiT_M_R50x1
+from model import BiT_M_R50x1
 from typing import Union
 from typing import Optional, Tuple, List
 from torch import Tensor
-
+import matplotlib.pyplot as plt
 
 @torch.no_grad()
 def get_embedding(
@@ -18,29 +18,33 @@ def get_embedding(
     model: torch.nn.Module,
     device: torch.device
 ) -> torch.Tensor:
-    _preprocess = transforms.Compose([
-        transforms.Resize(128, interpolation=Image.BILINEAR),
-        transforms.Pad(  # Pad to square
-            padding=lambda img: (
-                (128 - img.width) // 2,
-                (128 - img.height) // 2,
-                (128 - img.width) - (128 - img.width) // 2,
-                (128 - img.height) - (128 - img.height) // 2
-            ),
-            fill=255
-        ),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
-    ])
+
 
     if isinstance(img, str):
         with Image.open(img) as im:
             im = im.convert("RGB")
-            tensor = _preprocess(im).unsqueeze(0).to(device)
     else:
         im = img.convert("RGB")
-        tensor = _preprocess(im).unsqueeze(0).to(device)
 
+    im = ImageOps.expand(
+        im,
+        (
+            (max(im.size) - im.size[0]) // 2,
+            (max(im.size) - im.size[1]) // 2,
+            (max(im.size) - im.size[0]) // 2,
+            (max(im.size) - im.size[1]) // 2
+        ),
+        fill=(255, 255, 255)
+    )
+
+    im = im.resize((128, 128))
+
+    img_transforms = transforms.Compose(
+        [transforms.ToTensor(),
+         transforms.Normalize(mean=[0.5, 0.5, 0.5],
+                              std=[0.5, 0.5, 0.5]),
+         ])
+    tensor = img_transforms(im).unsqueeze(0).to(device)
     # 前向
     feats = model.features(tensor)
     if feats.ndim == 4:
@@ -49,14 +53,40 @@ def get_embedding(
 
     return feats.cpu()
 
+def display_matches(query_path: str, matches: list[tuple[str, float]]):
+    query_img = Image.open(query_path).convert("RGB")
+
+    # Load matched images and scores
+    imgs   = [Image.open(p).convert("RGB") for p, _ in matches]
+    scores = [s for _, s in matches]
+
+    # Create a row of subplots
+    total = 1 + len(imgs)
+    fig, axes = plt.subplots(1, total, figsize=(4*total, 4))
+
+    # Leftmost: query
+    axes[0].imshow(query_img)
+    axes[0].set_title("Query")
+    axes[0].axis("off")
+
+    # Then each match
+    for ax, img, score in zip(axes[1:], imgs, scores):
+        ax.imshow(img)
+        ax.set_title(f"{score:.3f}")
+        ax.axis("off")
+
+    plt.tight_layout()
+    plt.savefig('./test_result.png')
+
 
 class LogoMatcher:
-    def __init__(self, ref_dir: str | Path, model_weights_path: str | Path):
+    def __init__(self, ref_dir: str | Path, model_weights_path: str | Path, sim_thresh: float = 0.89):
         self.ref_dir = Path(ref_dir)
         self.model_weights_path = Path(model_weights_path)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model = None
         self.ref_database: Optional[Tuple[List[Tensor], List[str]]] = None
+        self.sim_thresh = sim_thresh
 
     def __call__(self, query_logo: str, top_k: int = 5) -> list[tuple[str, float]]:
         self._initialize()
@@ -79,6 +109,9 @@ class LogoMatcher:
 
         results = []
         for idx, score in zip(top_idxs.tolist(), top_vals.tolist()):
+            if score < self.sim_thresh:
+                # 由于 sims 是降序，这里可以直接跳出循环
+                break
             path = ref_paths[idx]
             try:
                 with Image.open(path) as c_img:
@@ -111,10 +144,12 @@ class LogoMatcher:
             feats, paths = [], []
             for cls in tqdm(os.listdir(self.ref_dir), desc="Load Logo reference database"):
                 if cls.startswith('.'): continue
+                if cls.startswith('_'): continue
                 d = self.ref_dir / cls
                 if not d.is_dir(): continue
                 for fn in os.listdir(d):
                     if not fn.lower().endswith(('.png','.jpg','.jpeg')): continue
+                    if "screenshot" in fn or "loginpage" in fn: continue
                     p = d / fn
                     try:
                         emb = get_embedding(str(p), self.model, self.device)

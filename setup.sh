@@ -54,44 +54,22 @@ source "$CONDA_BASE/etc/profile.d/conda.sh"
 if conda info --envs | grep -w "^$ENV_NAME" > /dev/null 2>&1; then
   echo "Activating existing Conda environment: $ENV_NAME"
 else
-  echo "Creating new Conda environment: $ENV_NAME with Python 3.9"
-  conda create -y -n "$ENV_NAME" python=3.9
+  echo "Creating new Conda environment: $ENV_NAME with Python 3.10"
+  conda create -y -n "$ENV_NAME" python=3.10
 fi
 
-# 8. Activate the Conda environment
+# activate the Conda environment
 echo "Activating Conda environment: $ENV_NAME"
 conda activate "$ENV_NAME"
 
 # 10. Determine the Operating System
 OS=$(uname -s)
 
-# 11. Install PyTorch, torchvision, torchaudio, and detectron2 based on OS and CUDA availability
-install_dependencies() {
-  if [[ "$OS" == "Darwin" ]]; then
-    echo "Detected macOS. Installing PyTorch and torchvision for macOS..."
-    conda run -n "$ENV_NAME" pip install torch==1.9.0 torchvision==0.10.0 torchaudio==0.9.0
-    conda run -n "$ENV_NAME" pip install 'git+https://github.com/facebookresearch/detectron2.git'
-  else
-    # Check for NVIDIA GPU by looking for 'nvcc' or 'nvidia-smi'
-    if command -v nvcc > /dev/null 2>&1 || command -v nvidia-smi > /dev/null 2>&1; then
-      echo "CUDA detected. Installing GPU-supported PyTorch and torchvision..."
-      conda run -n "$ENV_NAME" pip install torch==1.9.0+cu111 torchvision==0.10.0+cu111 torchaudio==0.9.0 -f "https://download.pytorch.org/whl/torch_stable.html"
-      conda run -n "$ENV_NAME" pip install detectron2 -f "https://dl.fbaipublicfiles.com/detectron2/wheels/cu111/torch1.9/index.html"
-    else
-      echo "No CUDA detected. Installing CPU-only PyTorch and torchvision..."
-      conda run -n "$ENV_NAME" pip install torch==1.9.0+cpu torchvision==0.10.0+cpu torchaudio==0.9.0 -f "https://download.pytorch.org/whl/torch_stable.html"
-      conda run -n "$ENV_NAME" pip install detectron2 -f "https://dl.fbaipublicfiles.com/detectron2/wheels/cpu/torch1.9/index.html"
-    fi
-  fi
-}
+# Install dependencies
+conda run -n "$ENV_NAME" pip3 install torch torchvision torchaudio
+conda run -n "$ENV_NAME" pip install gdown opencv-python numpy Pillow matplotlib
 
-install_dependencies
-conda run -n "$ENV_NAME" pip install gdown
-conda run -n "$ENV_NAME" pip install opencv-python
-conda run -n "$ENV_NAME" pip install numpy
-conda run -n "$ENV_NAME" pip install Pillow
-
-mkdirs models/
+mkdir models/
 cd models/
 download_with_retry "1H0Q_DbdKPLFcZee8I14K62qV7TTy7xvS" "resnetv2_rgb_new.pth.tar"
 
