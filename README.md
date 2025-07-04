@@ -1,6 +1,8 @@
-# Logo-Comparison-Tool
+# Logo Comparison Tool
 
 ## Setup
+
+---
 
 On Ubuntu/Mac/Windows, download anaconda [https://www.anaconda.com/download](https://www.anaconda.com/download).
 Turn on a VPN that can access google drive.
@@ -26,7 +28,11 @@ models/
     |_ ...
 ```
 
-2. Run inference with
+
+## Run Inference
+
+---
+
 ```bash
 conda activate phishpedia
 python main.py --query_img [query image path, e.g. test.png] --visualize_path [where to save the visualization, e.g. test_result.png]
