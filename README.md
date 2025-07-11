@@ -1,4 +1,4 @@
-# Logo Comparison Tool
+# LogoComp: Comparing two logos with their quantitative score
 
 ## Setup
 
